@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a73e8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>فاتورة كروت - شبكة نائف نت اللاسلكية</title>
+
+<!-- روابط وإعدادات تطبيق PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a73e8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="نائف نت">
+<link rel="apple-touch-icon" href="icon-512.png">
+
+<!-- مكتبة تحويل العناصر إلى صور -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; background: #eef2f5; margin: 0; }
+  .card { max-width: 500px; margin: auto; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); box-sizing: border-box; }
+  
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 2px solid #1a73e8; padding-bottom: 12px; }
+  .header-titles { text-align: right; flex-grow: 1; }
+  .header-titles h2 { margin: 0; color: #1a73e8; font-size: 1.35rem; }
+  .header-titles p { margin: 4px 0 0; color: #666; font-size: 0.9rem; }
+  
+  .logo-box { width: 75px; height: 75px; border-radius: 10px; border: 1.5px dashed #1a73e8; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; background: #f8fafc; margin-left: 12px; flex-shrink: 0; }
+  .logo-box img { width: 100%; height: 100%; object-fit: contain; }
+  .logo-box span { font-size: 0.65rem; color: #1a73e8; text-align: center; padding: 2px; }
+  
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .full-width { width: 100%; box-sizing: border-box; }
+  
+  label { font-size: 0.85rem; color: #555; display: block; margin-bottom: 4px; font-weight: bold; }
+  input[type="date"], select, input[type="text"], input[type="number"] { 
+    padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; text-align: center; box-sizing: border-box;
+  }
+  input[type="text"] { text-align: right; }
+
+  table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  th, td { padding: 8px; border-bottom: 1px solid #eee; text-align: center; font-size: 0.95rem; }
+  th { background: #1a73e8; color: white; border-radius: 4px; }
+  table input[type="number"] { width: 75px; padding: 6px; }
+
+  .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed #ddd; }
+  .highlight { font-weight: bold; font-size: 1.15rem; color: #d93025; }
+  .total-bold { font-weight: bold; font-size: 1.05rem; }
+  
+  .actions-box { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+  .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .btn-save-img { background: #0284c7; color: white; }
+  .btn-save-img:hover { background: #0369a1; }
+  .btn-copy { background: #28a745; color: white; }
+  .btn-copy:hover { background: #218838; }
+</style>
+</head>
+<body>
+
+<div class="card" id="invoiceArea">
+  <div class="header">
+    <div class="header-titles">
+      <h2>شبكة نائف نت اللاسلكية</h2>
+      <p>فاتورة حساب كروت الجملة</p>
+    </div>
+
+    <div class="logo-box" onclick="document.getElementById('logoInput').click()" title="انقر لاختيار الشعار">
+      <img id="logoImg" src="" style="display:none;" alt="شعار الشبكة">
+      <span id="logoText">اضغط هنا<br>لإضافة الشعار</span>
+    </div>
+    <input type="file" id="logoInput" accept="image/*" style="display: none;" onchange="loadLogo(event)">
+  </div>
+
+  <div style="margin-bottom: 10px;">
+    <label>اسم المحل / العميل:</label>
+    <input type="text" id="clientName" class="full-width" placeholder="أدخل اسم العميل">
+  </div>
+
+  <div class="meta-grid">
+    <div>
+      <label>التاريخ:</label>
+      <input type="date" id="billDate" class="full-width" onchange="updateDayFromDate()">
+    </div>
+    <div>
+      <label>يوم الأسبوع:</label>
+      <select id="billDay" class="full-width">
+        <option value="السبت">السبت</option>
+        <option value="الأحد">الأحد</option>
+        <option value="الإثنين">الإثنين</option>
+        <option value="الثلاثاء">الثلاثاء</option>
+        <option value="الأربعاء">الأربعاء</option>
+        <option value="الخميس">الخميس</option>
+        <option value="الجمعة">الجمعة</option>
+      </select>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>الفئة</th><th>سعر الجملة</th><th>الكمية</th><th>المجموع</th></tr>
+    <tr><td>100</td><td><input type="number" id="p100" value="80" oninput="calc()"></td><td><input type="number" id="q100" value="0" oninput="calc()"></td><td id="t100">0</td></tr>
+    <tr><td>200</td><td><input type="number" id="p200" value="180" oninput="calc()"></td><td><input type="number" id="q200" value="0" oninput="calc()"></td><td id="t200">0</td></tr>
+    <tr><td>250</td><td><input type="number" id="p250" value="225" oninput="calc()"></td><td><input type="number" id="q250" value="0" oninput="calc()"></td><td id="t250">0</td></tr>
+    <tr><td>300</td><td><input type="number" id="p300" value="270" oninput="calc()"></td><td><input type="number" id="q300" value="0" oninput="calc()"></td><td id="t300">0</td></tr>
+    <tr><td>500</td><td><input type="number" id="p500" value="450" oninput="calc()"></td><td><input type="number" id="q500" value="0" oninput="calc()"></td><td id="t500">0</td></tr>
+  </table>
+
+  <div class="summary-row">
+    <span>قيمة كروت اليوم:</span>
+    <span id="currentBill">0 ريال</span>
+  </div>
+
+  <div class="summary-row">
+    <span>حساب سابق (قديم):</span>
+    <input type="number" id="oldBalance" value="0" style="width: 100px;" oninput="calc()">
+  </div>
+
+  <div class="summary-row total-bold">
+    <span>إجمالي الحساب المطلوب:</span>
+    <span id="grandTotal">0 ريال</span>
+  </div>
+
+  <div class="summary-row">
+    <span>المبلغ المسدد (الواصل):</span>
+    <input type="number" id="paidAmount" value="0" style="width: 100px; color: #28a745; font-weight: bold;" oninput="calc()">
+  </div>
+
+  <div class="summary-row highlight">
+    <span>الرصيد المتبقي عليه:</span>
+    <span id="remainingBalance">0 ريال</span>
+  </div>
+
+  <div class="actions-box" data-html2canvas-ignore="true">
+    <button class="btn btn-save-img" onclick="saveAsImage()">حفظ الفاتورة كصورة 🖼️</button>
+    <button class="btn btn-copy" onclick="copyInvoice()">نسخ نص الفاتورة للواتساب 📋</button>
+  </div>
+</div>
+
+<script>
+  // تسجيل الـ Service Worker لتفعيل العمل أوفلاين
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then((reg) => console.log('Service Worker تم تسجيله بنجاح:', reg.scope))
+        .catch((err) => console.log('فشل تسجيل Service Worker:', err));
+    });
+  }
+
+  const daysOfWeek = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+  window.onload = function() {
+    const today = new Date();
+    const formattedDate = today.toISOString().split('T')[0];
+    document.getElementById('billDate').value = formattedDate;
+    updateDayFromDate();
+
+    const savedLogo = localStorage.getItem('network_logo');
+    if (savedLogo) {
+      applyLogo(savedLogo);
+    }
+  };
+
+  function loadLogo(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64Data = e.target.result;
+        applyLogo(base64Data);
+        localStorage.setItem('network_logo', base64Data);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function applyLogo(src) {
+    const img = document.getElementById('logoImg');
+    const txt = document.getElementById('logoText');
+    img.src = src;
+    img.style.display = 'block';
+    txt.style.display = 'none';
+  }
+
+  function updateDayFromDate() {
+    const dateVal = document.getElementById('billDate').value;
+    if (dateVal) {
+      const selectedDate = new Date(dateVal);
+      const dayIndex = new Date(selectedDate.getTime() + Math.abs(selectedDate.getTimezoneOffset() * 60000)).getDay();
+      document.getElementById('billDay').value = daysOfWeek[dayIndex];
+    }
+  }
+
+  function calc() {
+    const cats = [100, 200, 250, 300, 500];
+    let billTotal = 0;
+
+    cats.forEach(c => {
+      const p = parseFloat(document.getElementById('p' + c).value) || 0;
+      const q = parseFloat(document.getElementById('q' + c).value) || 0;
+      const sub = p * q;
+      document.getElementById('t' + c).innerText = sub.toLocaleString();
+      billTotal += sub;
+    });
+
+    const oldBal = parseFloat(document.getElementById('oldBalance').value) || 0;
+    const paid = parseFloat(document.getElementById('paidAmount').value) || 0;
+
+    const grand = billTotal + oldBal;
+    const rem = grand - paid;
+
+    document.getElementById('currentBill').innerText = billTotal.toLocaleString() + ' ريال';
+    document.getElementById('grandTotal').innerText = grand.toLocaleString() + ' ريال';
+    document.getElementById('remainingBalance').innerText = rem.toLocaleString() + ' ريال';
+  }
+
+  function saveAsImage() {
+    const invoice = document.getElementById('invoiceArea');
+    const clientName = (document.getElementById('clientName').value.trim() || 'عميل').replace(/\s+/g, '_');
+    const billDate = document.getElementById('billDate').value || 'تاريخ';
+    const fileName = `فاتورة_${clientName}_${billDate}.png`;
+
+    html2canvas(invoice, { scale: 2, useCORS: true }).then(canvas => {
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+  }
+
+  function copyInvoice() {
+    const name = document.getElementById('clientName').value || 'العميل المحترم';
+    const bDate = document.getElementById('billDate').value;
+    const bDay = document.getElementById('billDay').value;
+    const current = document.getElementById('currentBill').innerText;
+    const oldBal = (parseFloat(document.getElementById('oldBalance').value) || 0).toLocaleString() + ' ريال';
+    const grand = document.getElementById('grandTotal').innerText;
+    const paid = (parseFloat(document.getElementById('paidAmount').value) || 0).toLocaleString() + ' ريال';
+    const rem = document.getElementById('remainingBalance').innerText;
+
+    let text = `*🌐 شبكة نائف نت اللاسلكية*\n`;
+    text += `*فاتورة كروت بالجملة*\n`;
+    text += `👤 العميل: ${name}\n`;
+    text += `📅 اليوم: ${bDay} | التاريخ: ${bDate}\n`;
+    text += `--------------------------------\n`;
+    text += `📦 *تفاصيل الكروت:*\n`;
+
+    const cats = [100, 200, 250, 300, 500];
+    let hasCards = false;
+    cats.forEach(c => {
+      const p = parseFloat(document.getElementById('p' + c).value) || 0;
+      const q = parseFloat(document.getElementById('q' + c).value) || 0;
+      const sub = p * q;
+      if(q > 0) {
+        text += `▫️ فئة ${c}: عدد (${q}) × سعر ${p} = ${sub.toLocaleString()} ريال\n`;
+        hasCards = true;
+      }
+    });
+
+    if(!hasCards) text += `(لم يتم تحديد أي كروت)\n`;
+
+    text += `--------------------------------\n`;
+    text += `💵 قيمة كروت اليوم: ${current}\n`;
+    text += `⏳ حساب سابق: ${oldBal}\n`;
+    text += `*🧾 الإجمالي المطلوب:* ${grand}\n`;
+    text += `✅ المسدد (الواصل): ${paid}\n`;
+    text += `*⚠️ المتبقي في الحساب:* ${rem}\n`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      alert('تم نسخ الفاتورة بنجاح!');
+    });
+  }
+</script>
+
+</body>
+</html>
