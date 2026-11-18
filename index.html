@@ -33,7 +33,6 @@
   }
   body { padding: 8px 8px 25px; }
 
-  /* شاشة القفل */
   #lockScreen {
     position: fixed; inset: 0; background: #0f172a; color: white;
     z-index: 9999; display: none; flex-direction: column;
@@ -45,7 +44,6 @@
     border: 2px solid #38bdf8; margin: 15px 0;
   }
 
-  /* الترويسة */
   .app-header {
     background: linear-gradient(135deg, #0f172a, #1e3a8a);
     color: white; padding: 12px; border-radius: 12px;
@@ -62,7 +60,6 @@
   .logo-circle img { width: 100%; height: 100%; object-fit: cover; }
   .logo-circle span { color: #0f172a; font-size: 0.58rem; text-align: center; font-weight: bold; }
 
-  /* شريط المزامنة والنسخ العلوي (صفّين متناسقين للجوال) */
   .top-backup-bar {
     background: #ffffff; padding: 8px; border-radius: 10px;
     margin-bottom: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05);
@@ -75,11 +72,10 @@
   .top-backup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
   .top-btn {
     border: none; border-radius: 6px; padding: 8px 4px;
-    font-size: 0.76rem; font-weight: bold; color: white; cursor: pointer;
+    font-size: 0.75rem; font-weight: bold; color: white; cursor: pointer;
     text-align: center;
   }
 
-  /* القائمة الرئيسية */
   .main-menu {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;
     margin-bottom: 8px; background: var(--bg);
@@ -116,7 +112,6 @@
   .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
   .grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 
-  /* ضبط الجداول لتناسب عرض الجوال بدون تمدد */
   table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 8px 0; }
   th, td {
     padding: 6px 2px; border-bottom: 1px solid #e2e8f0;
@@ -255,10 +250,13 @@
     <span id="lastBackupTime">آخر مزامنة: الآن</span>
   </div>
   <div class="top-backup-actions">
-    <button class="top-btn" style="background:#0284c7;" onclick="syncNow(true)">☁️ مزامنة سحابية</button>
+    <button class="top-btn" style="background:#0284c7;" onclick="syncNow(true)">☁️ رفع للسحابة</button>
+    <button class="top-btn" style="background:#7c3aed;" onclick="pullFromCloud()">⬇️ جلب من السحابة</button>
     <button class="top-btn" style="background:#15803d;" onclick="exportFullExcel()">📊 تصدير Excel</button>
-    <button class="top-btn" style="background:#0f172a;" onclick="downloadBackupToPhone()">⬇️ نسخة للجوال</button>
-    <button class="top-btn" style="background:#d97706;" onclick="document.getElementById('topRestoreInput').click()">📂 استعادة ملف</button>
+    <button class="top-btn" style="background:#0f172a;" onclick="downloadBackupToPhone()">💾 نسخة للجوال</button>
+  </div>
+  <div style="margin-top:5px;">
+    <button class="top-btn" style="background:#d97706; width:100%;" onclick="document.getElementById('topRestoreInput').click()">📂 استعادة من ملف JSON محفوظ بالجوال</button>
   </div>
   <input type="file" id="topRestoreInput" accept=".json" style="display:none;" onchange="restoreFromFile(event)">
 </div>
@@ -292,7 +290,7 @@
 </div>
 <div style="max-width:580px; margin:0 auto 10px;">
   <button class="btn btn-dark btn-sm" style="width:100%; border-radius:8px;" onclick="switchTab('tab-settings', this)">
-    ⚙️ الإعدادات (إضافة فئات الكروت، تعديل البقالات، رقم التواصل، والقفل)
+    ⚙️ الإعدادات (إضافة فئات الكروت، تعديل البقالات، رابط السحابة، والقفل)
   </button>
 </div>
 
@@ -415,10 +413,7 @@
     <div id="clientsLedgerList"></div>
   </div>
 
-  <!-- كشف حساب بقالة محددة لحالها -->
   <div class="card" id="singleStatementCard" style="display:none;">
-    
-    <!-- لوحة السند السريع داخل كشف حساب العميل -->
     <div class="quick-voucher-box" data-ignore="true">
       <div class="quick-voucher-title">⚡ إضافة حركة مالية سريعة على هذا الحساب (واصل أو آجل):</div>
       <div class="grid-2">
@@ -2210,7 +2205,7 @@
     });
   }
 
-  // ================= المزامنة السحابية الحقيقية =================
+  // ================= المزامنة السحابية (رفع + جلب) =================
   async function syncNow(showAlert) {
     const token = db.settings.tgToken;
     const chatId = db.settings.tgChatId;
@@ -2236,7 +2231,6 @@
     let driveOk = false;
     let errorLogs = [];
 
-    // 1. المزامنة الحقيقية مع تيليجرام
     if (token && chatId) {
       try {
         const fileName = `NaifNet_Sync_${stamp}.json`;
@@ -2261,7 +2255,6 @@
       }
     }
 
-    // 2. المزامنة الحقيقية مع Google Drive & Sheets
     if (webhookUrl) {
       try {
         const res = await fetch(webhookUrl, {
@@ -2302,6 +2295,63 @@
       if (showAlert) {
         alert(`❌ فشلت المزامنة السحابية للأسباب التالية:\n\n• ${errorLogs.join('\n• ')}`);
       }
+    }
+  }
+
+  async function pullFromCloud() {
+    const webhookUrl = db.settings.webhookUrl;
+    if (!webhookUrl) {
+      alert('⚠️ يرجى لصق رابط Google Drive (Webhook) في قسم (الإعدادات) أولاً ثم الضغط على حفظ.');
+      return;
+    }
+    if (!navigator.onLine) {
+      alert('📴 لا يوجد اتصال بالإنترنت حالياً.');
+      return;
+    }
+
+    if (db.clients.length > 0 || db.transactions.length > 0) {
+      if (!confirm('⚠️ سيتم استبدال البيانات الحالية في هذا المتصفح بآخر نسخة محفوظة في Google Drive. هل تريد المتابعة؟')) {
+        return;
+      }
+    }
+
+    document.getElementById('syncStatusText').innerText = `⏳ جاري جلب البيانات من السحابة...`;
+    try {
+      const fetchUrl = webhookUrl + (webhookUrl.includes('?') ? '&' : '?') + 'action=restore';
+      const res = await fetch(fetchUrl);
+      const resultText = await res.text();
+      const resultJson = JSON.parse(resultText);
+
+      if (resultJson.status === 'success' && resultJson.data) {
+        const currentWebhook = db.settings.webhookUrl;
+        const currentTgToken = db.settings.tgToken;
+        const currentTgChat = db.settings.tgChatId;
+
+        db = {
+          ...db,
+          ...resultJson.data,
+          stockLogs: resultJson.data.stockLogs || [],
+          expenses: resultJson.data.expenses || [],
+          settings: {
+            ...db.settings,
+            ...(resultJson.data.settings || {}),
+            webhookUrl: resultJson.data.settings?.webhookUrl || currentWebhook,
+            tgToken: resultJson.data.settings?.tgToken || currentTgToken,
+            tgChatId: resultJson.data.settings?.tgChatId || currentTgChat
+          }
+        };
+
+        saveDB(false);
+        renderAll();
+        document.getElementById('syncStatusText').innerText = `☁️ تم الجلب من Google Drive`;
+        alert(`✅ تم جلب واستعادة البيانات من السحابة بنجاح!\nالملف: ${resultJson.fileName}\nالبقالات: ${db.clients.length} | العمليات: ${db.transactions.length}`);
+      } else {
+        document.getElementById('syncStatusText').innerText = `❌ فشل جلب البيانات`;
+        alert(`❌ تعذر جلب البيانات من السحابة:\n${resultJson.message || 'تأكد من تحديث كود Google Apps Script ونشر إصدار جديد'}`);
+      }
+    } catch (e) {
+      document.getElementById('syncStatusText').innerText = `❌ خطأ في الاتصال بالسحابة`;
+      alert('❌ حدث خطأ أثناء الاتصال بـ Google Drive. تأكد من تحديث كود Apps Script ونشر إصدار جديد.');
     }
   }
 
