@@ -2309,13 +2309,7 @@
       return;
     }
 
-    if (db.clients.length > 0 || db.transactions.length > 0) {
-      if (!confirm('⚠️ سيتم استبدال البيانات الحالية في هذا المتصفح بآخر نسخة محفوظة في Google Drive. هل تريد المتابعة؟')) {
-        return;
-      }
-    }
-
-    document.getElementById('syncStatusText').innerText = `⏳ جاري جلب البيانات من السحابة...`;
+    document.getElementById('syncStatusText').innerText = `⏳ جاري جلب ودمج البيانات...`;
     try {
       const fetchUrl = webhookUrl + (webhookUrl.includes('?') ? '&' : '?') + 'action=restore';
       const res = await fetch(fetchUrl);
@@ -2323,37 +2317,96 @@
       const resultJson = JSON.parse(resultText);
 
       if (resultJson.status === 'success' && resultJson.data) {
+        const cloud = resultJson.data;
+        let addedClients = 0, addedTxs = 0, addedStock = 0, addedExp = 0;
+
+        // 1. دمج فئات الكروت (إضافة أي فئة جديدة من السحابة)
+        (cloud.cards || []).forEach(cc => {
+          if (!db.cards.some(lc => lc.name === cc.name)) {
+            db.cards.push(cc);
+          }
+        });
+
+        // 2. دمج البقالات وتوحيد المعرّفات (IDs) لمنع تكرار نفس البقالة
+        const clientIdMap = {}; // لربط معرّف السحابة بمعرّف الجهاز المحلي إذا تطابق الاسم
+        (cloud.clients || []).forEach(cc => {
+          const existingById = db.clients.find(lc => lc.id === cc.id);
+          const existingByName = db.clients.find(lc => lc.name.trim() === cc.name.trim());
+
+          if (existingById) {
+            clientIdMap[cc.id] = existingById.id;
+            if (!existingById.phone && cc.phone) existingById.phone = cc.phone;
+          } else if (existingByName) {
+            clientIdMap[cc.id] = existingByName.id;
+            if (!existingByName.phone && cc.phone) existingByName.phone = cc.phone;
+          } else {
+            db.clients.push({ ...cc });
+            clientIdMap[cc.id] = cc.id;
+            addedClients++;
+          }
+        });
+
+        // 3. دمج العمليات (الفواتير والسندات) دون تكرار
+        (cloud.transactions || []).forEach(ct => {
+          if (!db.transactions.some(lt => lt.id === ct.id)) {
+            const mappedClientId = clientIdMap[ct.clientId] || ct.clientId;
+            db.transactions.push({ ...ct, clientId: mappedClientId });
+            addedTxs++;
+          }
+        });
+
+        // ترتيب العمليات من الأحدث إلى الأقدم وإعادة احتساب أرصدة جميع البقالات
+        db.transactions.sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+        db.clients.forEach(c => recalculateClientBalance(c.id));
+
+        // 4. دمج دفعات المخزون المطبوعة
+        (cloud.stockLogs || []).forEach(cs => {
+          if (!db.stockLogs.some(ls => ls.id === cs.id)) {
+            db.stockLogs.push({ ...cs });
+            addedStock++;
+          }
+        });
+
+        // 5. دمج المصروفات اليومية
+        (cloud.expenses || []).forEach(ce => {
+          if (!db.expenses.some(le => le.id === ce.id)) {
+            db.expenses.push({ ...ce });
+            addedExp++;
+          }
+        });
+
+        // الحفاظ على إعدادات الربط الحالية
         const currentWebhook = db.settings.webhookUrl;
         const currentTgToken = db.settings.tgToken;
         const currentTgChat = db.settings.tgChatId;
-
-        db = {
-          ...db,
-          ...resultJson.data,
-          stockLogs: resultJson.data.stockLogs || [],
-          expenses: resultJson.data.expenses || [],
-          settings: {
-            ...db.settings,
-            ...(resultJson.data.settings || {}),
-            webhookUrl: resultJson.data.settings?.webhookUrl || currentWebhook,
-            tgToken: resultJson.data.settings?.tgToken || currentTgToken,
-            tgChatId: resultJson.data.settings?.tgChatId || currentTgChat
-          }
+        db.settings = {
+          ...db.settings,
+          ...(cloud.settings || {}),
+          webhookUrl: currentWebhook || cloud.settings?.webhookUrl || '',
+          tgToken: currentTgToken || cloud.settings?.tgToken || '',
+          tgChatId: currentTgChat || cloud.settings?.tgChatId || ''
         };
 
         saveDB(false);
         renderAll();
-        document.getElementById('syncStatusText').innerText = `☁️ تم الجلب من Google Drive`;
-        alert(`✅ تم جلب واستعادة البيانات من السحابة بنجاح!\nالملف: ${resultJson.fileName}\nالبقالات: ${db.clients.length} | العمليات: ${db.transactions.length}`);
+        document.getElementById('syncStatusText').innerText = `☁️ تم الدمج من Google Drive`;
+        alert(
+          `✅ تم جلب ودمج البيانات بنجاح دون مسح بياناتك السابقة!\n\n` +
+          `➕ بقالات جديدة أُضيفت: ${addedClients}\n` +
+          `➕ عمليات وفواتير أُضيفت: ${addedTxs}\n` +
+          `➕ دفعات مخزون أُضيفت: ${addedStock}\n` +
+          `➕ مصروفات أُضيفت: ${addedExp}`
+        );
       } else {
         document.getElementById('syncStatusText').innerText = `❌ فشل جلب البيانات`;
-        alert(`❌ تعذر جلب البيانات من السحابة:\n${resultJson.message || 'تأكد من تحديث كود Google Apps Script ونشر إصدار جديد'}`);
+        alert(`❌ تعذر جلب البيانات من السحابة:\n${resultJson.message || 'تأكد من تحديث كود Google Apps Script'}`);
       }
     } catch (e) {
       document.getElementById('syncStatusText').innerText = `❌ خطأ في الاتصال بالسحابة`;
-      alert('❌ حدث خطأ أثناء الاتصال بـ Google Drive. تأكد من تحديث كود Apps Script ونشر إصدار جديد.');
+      alert('❌ حدث خطأ أثناء الاتصال بـ Google Drive. تأكد من الإنترنت ورابط السكربت.');
     }
   }
+
 
   function downloadBackupToPhone() {
     const nowStr = getFormattedNow();
