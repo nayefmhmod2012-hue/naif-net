@@ -1,13 +1,13 @@
 {
-  "name": "شبكة نائف نت اللاسلكية - الفواتير",
+  "name": "شبكة نائف نت اللاسلكية - النظام المحاسبي",
   "short_name": "نائف نت",
-  "description": "حاسبة وفواتير كروت شبكة نائف نت بالجملة",
+  "description": "نظام الفواتير والمخزون وكشوفات حسابات البقالات - شبكة نائف نت اللاسلكية",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#eef2f5",
-  "theme_color": "#1a73e8",
+  "background_color": "#eef2f6",
+  "theme_color": "#0f172a",
   "lang": "ar",
   "dir": "rtl",
   "icons": [
