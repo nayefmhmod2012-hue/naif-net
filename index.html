@@ -251,7 +251,7 @@
   </div>
   <div class="top-backup-actions">
     <button class="top-btn" style="background:#0284c7;" onclick="syncNow(true)">☁️ رفع للسحابة</button>
-    <button class="top-btn" style="background:#7c3aed;" onclick="pullFromCloud()">⬇️ جلب من السحابة</button>
+    <button class="top-btn" style="background:#7c3aed;" onclick="pullFromCloud(false)">⬇️ جلب من السحابة</button>
     <button class="top-btn" style="background:#15803d;" onclick="exportFullExcel()">📊 تصدير Excel</button>
     <button class="top-btn" style="background:#0f172a;" onclick="downloadBackupToPhone()">💾 نسخة للجوال</button>
   </div>
@@ -913,7 +913,11 @@
     window.addEventListener('online', () => {
       if (db.settings.pendingSync) syncNow(false);
     });
-    if (navigator.onLine && db.settings.pendingSync) syncNow(false);
+
+    // الجلب والدمج التلقائي من السحابة عند فتح المتصفح
+    if (navigator.onLine && db.settings.webhookUrl) {
+      pullFromCloud(true);
+    }
   };
 
   function renderCopyrightFooter() {
@@ -2205,7 +2209,7 @@
     });
   }
 
-  // ================= المزامنة السحابية (رفع + جلب) =================
+  // ================= المزامنة السحابية (رفع + جلب ودمج) =================
   async function syncNow(showAlert) {
     const token = db.settings.tgToken;
     const chatId = db.settings.tgChatId;
@@ -2298,14 +2302,14 @@
     }
   }
 
-  async function pullFromCloud() {
+  async function pullFromCloud(isAuto = false) {
     const webhookUrl = db.settings.webhookUrl;
     if (!webhookUrl) {
-      alert('⚠️ يرجى لصق رابط Google Drive (Webhook) في قسم (الإعدادات) أولاً ثم الضغط على حفظ.');
+      if (!isAuto) alert('⚠️ يرجى لصق رابط Google Drive (Webhook) في قسم (الإعدادات) أولاً ثم الضغط على حفظ.');
       return;
     }
     if (!navigator.onLine) {
-      alert('📴 لا يوجد اتصال بالإنترنت حالياً.');
+      if (!isAuto) alert('📴 لا يوجد اتصال بالإنترنت حالياً.');
       return;
     }
 
@@ -2320,15 +2324,15 @@
         const cloud = resultJson.data;
         let addedClients = 0, addedTxs = 0, addedStock = 0, addedExp = 0;
 
-        // 1. دمج فئات الكروت (إضافة أي فئة جديدة من السحابة)
+        // 1. دمج فئات الكروت
         (cloud.cards || []).forEach(cc => {
           if (!db.cards.some(lc => lc.name === cc.name)) {
             db.cards.push(cc);
           }
         });
 
-        // 2. دمج البقالات وتوحيد المعرّفات (IDs) لمنع تكرار نفس البقالة
-        const clientIdMap = {}; // لربط معرّف السحابة بمعرّف الجهاز المحلي إذا تطابق الاسم
+        // 2. دمج البقالات وتوحيد المعرّفات لمنع التكرار
+        const clientIdMap = {};
         (cloud.clients || []).forEach(cc => {
           const existingById = db.clients.find(lc => lc.id === cc.id);
           const existingByName = db.clients.find(lc => lc.name.trim() === cc.name.trim());
@@ -2346,7 +2350,7 @@
           }
         });
 
-        // 3. دمج العمليات (الفواتير والسندات) دون تكرار
+        // 3. دمج العمليات دون تكرار
         (cloud.transactions || []).forEach(ct => {
           if (!db.transactions.some(lt => lt.id === ct.id)) {
             const mappedClientId = clientIdMap[ct.clientId] || ct.clientId;
@@ -2355,11 +2359,10 @@
           }
         });
 
-        // ترتيب العمليات من الأحدث إلى الأقدم وإعادة احتساب أرصدة جميع البقالات
         db.transactions.sort((a, b) => (b.id || '').localeCompare(a.id || ''));
         db.clients.forEach(c => recalculateClientBalance(c.id));
 
-        // 4. دمج دفعات المخزون المطبوعة
+        // 4. دمج دفعات المخزون
         (cloud.stockLogs || []).forEach(cs => {
           if (!db.stockLogs.some(ls => ls.id === cs.id)) {
             db.stockLogs.push({ ...cs });
@@ -2367,7 +2370,7 @@
           }
         });
 
-        // 5. دمج المصروفات اليومية
+        // 5. دمج المصروفات
         (cloud.expenses || []).forEach(ce => {
           if (!db.expenses.some(le => le.id === ce.id)) {
             db.expenses.push({ ...ce });
@@ -2375,7 +2378,6 @@
           }
         });
 
-        // الحفاظ على إعدادات الربط الحالية
         const currentWebhook = db.settings.webhookUrl;
         const currentTgToken = db.settings.tgToken;
         const currentTgChat = db.settings.tgChatId;
@@ -2389,24 +2391,32 @@
 
         saveDB(false);
         renderAll();
-        document.getElementById('syncStatusText').innerText = `☁️ تم الدمج من Google Drive`;
-        alert(
-          `✅ تم جلب ودمج البيانات بنجاح دون مسح بياناتك السابقة!\n\n` +
-          `➕ بقالات جديدة أُضيفت: ${addedClients}\n` +
-          `➕ عمليات وفواتير أُضيفت: ${addedTxs}\n` +
-          `➕ دفعات مخزون أُضيفت: ${addedStock}\n` +
-          `➕ مصروفات أُضيفت: ${addedExp}`
-        );
+        document.getElementById('syncStatusText').innerText = `☁️ تم الجلب والدمج من السحابة`;
+
+        if (!isAuto) {
+          alert(
+            `✅ تم جلب ودمج البيانات بنجاح دون مسح بياناتك السابقة!\n\n` +
+            `➕ بقالات جديدة أُضيفت: ${addedClients}\n` +
+            `➕ عمليات وفواتير أُضيفت: ${addedTxs}\n` +
+            `➕ دفعات مخزون أُضيفت: ${addedStock}\n` +
+            `➕ مصروفات أُضيفت: ${addedExp}`
+          );
+        } else if (addedClients > 0 || addedTxs > 0 || addedStock > 0 || addedExp > 0) {
+          showToast(`☁️ تم جلب ودمج (${addedClients} بقالة / ${addedTxs} عملية) تلقائياً`);
+        }
       } else {
-        document.getElementById('syncStatusText').innerText = `❌ فشل جلب البيانات`;
-        alert(`❌ تعذر جلب البيانات من السحابة:\n${resultJson.message || 'تأكد من تحديث كود Google Apps Script'}`);
+        document.getElementById('syncStatusText').innerText = `🟢 متزامن ومحفوظ محلياً`;
+        if (!isAuto) {
+          alert(`❌ تعذر جلب البيانات من السحابة:\n${resultJson.message || 'تأكد من تحديث كود Google Apps Script'}`);
+        }
       }
     } catch (e) {
-      document.getElementById('syncStatusText').innerText = `❌ خطأ في الاتصال بالسحابة`;
-      alert('❌ حدث خطأ أثناء الاتصال بـ Google Drive. تأكد من الإنترنت ورابط السكربت.');
+      document.getElementById('syncStatusText').innerText = `🟢 متزامن ومحفوظ محلياً`;
+      if (!isAuto) {
+        alert('❌ حدث خطأ أثناء الاتصال بـ Google Drive. تأكد من الإنترنت ورابط السكربت.');
+      }
     }
   }
-
 
   function downloadBackupToPhone() {
     const nowStr = getFormattedNow();
